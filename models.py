@@ -96,14 +96,22 @@ class U_Net(Module):
         })
 
     def forward(self, x):
+        #print(x.shape)
         skip_1 = self.NN['contr_1'](x)
+        #print(skip_1.shape)
         contr_1 = self.NN["max_pool"](skip_1)
+        #print(contr_1.shape)
         skip_2 = self.NN["contr_2"](contr_1)
+        #print(skip_2.shape)
         contr_2 = self.NN["max_pool"](skip_2)
+        #print(contr_2.shape)
         skip_3 = self.NN["contr_3"](contr_2)
+        #print(skip_3.shape)
         contr_3 = self.NN["max_pool"](skip_3)
+        #print(contr_3.shape)
 
         bottleneck = self.NN["bottleneck"](contr_3)
+        #print(bottleneck.shape)
 
         cat_1 = torch.cat((bottleneck, skip_3), 1)
         exp_1 = self.NN["expand_1"](cat_1)

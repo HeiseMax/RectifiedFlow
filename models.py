@@ -1,11 +1,63 @@
 import torch
-from torch.nn import Module, Sequential, Conv2d, MaxPool2d, Dropout2d, ReLU, Flatten, Linear, BatchNorm2d, AvgPool2d, Sigmoid, Tanh, Softmax, Dropout, ConvTranspose2d, ModuleDict
+from torch.nn import Module, Sequential, Conv2d, MaxPool2d, Dropout2d, ReLU, Flatten, Linear, BatchNorm2d, AvgPool2d, Sigmoid, Tanh, Softmax, Dropout, ConvTranspose2d, BatchNorm1d, ModuleDict
+
+## Linear
+
+class Toy_MLP(Module):
+    def __init__(self, input_dim, layers, hidden_num):
+        super().__init__()
+        self.NN = Sequential(Linear(input_dim + 1, hidden_num, bias=True))
+
+        for layer in range(layers -2):
+            self.NN.append(Tanh())
+            self.NN.append(Linear(hidden_num, hidden_num, bias=True))
+        self.NN.append(Tanh())
+        self.NN.append(Linear(hidden_num, input_dim, bias=True))
+                            
+    
+    def forward(self, x_input, t):
+        inputs = torch.cat([x_input, t], dim=1)
+        x = self.NN(inputs)
+
+        return x
+
+class MLP(Module):
+    def __init__(self, input_dim, layers, hidden_num, p_drop = 0.2):
+        super().__init__()
+        self.input_dim = input_dim
+        self.input_dim = hidden_num
+
+        self.p_drop = p_drop
+
+        self.NN = Sequential(Linear(input_dim + 1, hidden_num, bias=True),
+                            ReLU(),
+                            BatchNorm1d(hidden_num)
+                            )
+
+        for layer in range(layers -2):
+            self.NN.append(Dropout(p_drop))
+            self.NN.append(Linear(hidden_num, hidden_num, bias=True))
+            self.NN.append(ReLU())
+            self.NN.append(BatchNorm1d(hidden_num))
+        self.NN.append(Dropout(p_drop))
+        self.NN.append(Linear(hidden_num, input_dim, bias=True))
+
+
+    def forward(self, x_input, t):
+        inputs = torch.cat([x_input, t], dim=1)
+        x = self.NN(inputs)
+
+        return x
+
+## Convols
 
 class SimpleNet(Module):
 
     def __init__(self, input_shape, num_labels, initial_lr, momentum, weight_decay):
         '''input_shape: tuple (batch_size, channels, x_pixels, y_pixels)'''
         super().__init__()
+
+        final_size = 0 # has to be fixed
 
         self.NN = Sequential(Conv2d(input_shape[1], 6, 5, padding="same"),
                              BatchNorm2d(6),

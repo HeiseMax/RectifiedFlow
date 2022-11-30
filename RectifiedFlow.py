@@ -200,7 +200,7 @@ def train_rectified_flow(rectified_flow, optimizer, scheduler, dataloader, devic
             batch = batch_[0].reshape(-1, 28*28).to(device)            
             indeces = torch.randperm(batch.shape[0])
             batch = batch[indeces]
-            z0 = torch.randn(batch.shape).to(device) * 1/3
+            z0 = torch.randn(batch.shape).to(device)
             t = torch.rand((batch.shape[0], 1)).to(device)
             perturbed_data = t * batch + (1.-t) * z0
 
@@ -260,6 +260,27 @@ class RectifiedFlow_Unet(Module):
         return trajectory
 
     @torch.no_grad()
+    def sample_ode_cond(self, z0, labels, num_steps):
+        trajectory = []
+        trajectory.append(z0.detach().clone())
+
+        batchsize = z0.shape[0]
+
+        dt = 1./num_steps
+        z = z0.detach().clone()
+        for i in range(num_steps):
+            t = torch.ones(batchsize).to(self.device) * i /num_steps
+            t_expand = t.view(-1, 1, 1, 1).repeat(1, z.shape[1], z.shape[2], z.shape[3])
+            labels_expand = labels.view(-1, 1, 1, 1).repeat(1, z.shape[1], z.shape[2], z.shape[3])
+
+            pred = self.v_model(torch.stack([z, t_expand, labels_expand], axis = 1).reshape(-1, 3, 32,32))
+            z = z.detach().clone() + pred * dt
+
+            trajectory.append(z.detach().clone())
+
+        return trajectory
+
+    @torch.no_grad()
     def reverse_sample_ode(self, z1, num_steps):
         trajectory = []
         trajectory.append(z1.detach().clone())
@@ -279,6 +300,27 @@ class RectifiedFlow_Unet(Module):
 
         return trajectory
 
+    @torch.no_grad()
+    def reverse_sample_ode_cond(self, z1, labels, num_steps):
+        trajectory = []
+        trajectory.append(z1.detach().clone())
+
+        batchsize = z1.shape[0]
+
+        dt = 1./num_steps
+        z = z1.detach().clone()
+        for i in range(num_steps):
+            t = torch.ones(batchsize).to(self.device) * i /num_steps
+            t_expand = t.view(-1, 1, 1, 1).repeat(1, z.shape[1], z.shape[2], z.shape[3])
+            labels_expand = labels.view(-1, 1, 1, 1).repeat(1, z.shape[1], z.shape[2], z.shape[3])
+
+            pred = self.v_model(torch.stack([z, 1 -t_expand, labels_expand], axis = 1).reshape(-1, 3, 32,32))
+            z = z.detach().clone() - (pred * dt)
+
+            trajectory.append(z.detach().clone())
+
+        return trajectory
+
 def train_rectified_flow_Unet(rectified_flow, optimizer, scheduler, dataloader, device, epochs):
     loss_curve = rectified_flow.loss_curve
 
@@ -290,13 +332,137 @@ def train_rectified_flow_Unet(rectified_flow, optimizer, scheduler, dataloader, 
             batch = batch_[0].to(device)            
             indeces = torch.randperm(batch.shape[0])
             batch = batch[indeces]
-            z0 = torch.randn(batch.shape).to(device) * 1/3
+            z0 = torch.randn(batch.shape).to(device)
             t = torch.rand(batch.shape[0]).to(device)
             t_expand = t.view(-1, 1, 1, 1).repeat(1, batch.shape[1], batch.shape[2], batch.shape[3])
             perturbed_data = t_expand * batch + (1.-t_expand) * z0
 
             target = batch - z0        
             score = rectified_flow.v_model(torch.stack([perturbed_data, t_expand], axis=1).reshape(-1,2,32,32))
+            category = MSELoss()
+            loss = category(score, target)
+
+            loss.backward()
+            optimizer.step()
+            loss_curve.append(loss.item())
+            scheduler.step(loss.item())
+
+    rectified_flow.loss_curve = loss_curve
+    return rectified_flow
+
+def train_rectified_flow_Unet_init(rectified_flow, optimizer, scheduler, dataloader, device, epochs):
+    loss_curve = rectified_flow.loss_curve
+
+    rectified_flow.v_model.train()
+    for epoch in range(epochs):
+        for batch_ in dataloader:
+            optimizer.zero_grad()
+
+            batch = batch_[0].to(device)            
+            indeces = torch.randperm(batch.shape[0])
+            batch = batch[indeces]
+            z0 = torch.randn(batch.shape).to(device)
+            t = torch.rand(batch.shape[0]).to(device)
+            t_expand = t.view(-1, 1, 1, 1).repeat(1, batch.shape[1], batch.shape[2], batch.shape[3])
+            perturbed_data = t_expand * batch + (1.-t_expand) * z0
+
+            target = batch - z0        
+            score = rectified_flow.v_model(torch.stack([perturbed_data, t_expand], axis=1).reshape(-1,2,32,32))
+            category = MSELoss()
+            loss = category(score, target)
+
+            loss.backward()
+            optimizer.step()
+            loss_curve.append(loss.item())
+            scheduler.step(loss.item())
+
+    rectified_flow.loss_curve = loss_curve
+    return rectified_flow
+
+def train_rectified_flow_Unet_reverse(rectified_flow, optimizer, scheduler, dataloader, device, epochs):
+    loss_curve = rectified_flow.loss_curve
+
+    rectified_flow.v_model.train()
+    for epoch in range(epochs):
+        for batch_ in dataloader:
+            optimizer.zero_grad()
+
+            batch = batch_[0].to(device)            
+            indeces = torch.randperm(batch.shape[0])
+            batch = batch[indeces]
+            z0 = batch
+            batch = torch.randn(batch.shape).to(device)
+            t = torch.rand(batch.shape[0]).to(device)
+            t_expand = t.view(-1, 1, 1, 1).repeat(1, batch.shape[1], batch.shape[2], batch.shape[3])
+            perturbed_data = t_expand * batch + (1.-t_expand) * z0
+
+            target = batch - z0        
+            score = rectified_flow.v_model(torch.stack([perturbed_data, t_expand], axis=1).reshape(-1,2,32,32))
+            category = MSELoss()
+            loss = category(score, target)
+
+            loss.backward()
+            optimizer.step()
+            loss_curve.append(loss.item())
+            scheduler.step(loss.item())
+
+    rectified_flow.loss_curve = loss_curve
+    return rectified_flow
+
+def train_rectified_flow_Unet_cond_reverse(rectified_flow, optimizer, scheduler, dataloader, device, epochs):
+    loss_curve = rectified_flow.loss_curve
+
+    rectified_flow.v_model.train()
+    for epoch in range(epochs):
+        for batch_ in dataloader:
+            optimizer.zero_grad()
+
+            batch, labels = batch_
+            indeces = torch.randperm(batch.shape[0])
+            batch = batch[indeces].to(device)
+            z0 = batch
+            batch = torch.randn(batch.shape).to(device)
+            t = torch.rand(batch.shape[0]).to(device)
+            t_expand = t.view(-1, 1, 1, 1).repeat(1, batch.shape[1], batch.shape[2], batch.shape[3])
+            labels = np.where(labels == 4, 0, 1)
+            labels = torch.tensor(labels).to(device)
+            labels_expand = labels.view(-1,1,1,1).repeat(1, batch.shape[1], batch.shape[2], batch.shape[3])
+            perturbed_data = t_expand * batch + (1.-t_expand) * z0
+
+            target = batch - z0        
+            score = rectified_flow.v_model(torch.stack([perturbed_data, t_expand, labels_expand], axis=1).reshape(-1,3,32,32))
+            category = MSELoss()
+            loss = category(score, target)
+
+            loss.backward()
+            optimizer.step()
+            loss_curve.append(loss.item())
+            scheduler.step(loss.item())
+
+    rectified_flow.loss_curve = loss_curve
+    return rectified_flow
+
+def train_rectified_flow_Unet_cond(rectified_flow, optimizer, scheduler, dataloader, device, epochs):
+    loss_curve = rectified_flow.loss_curve
+
+    rectified_flow.v_model.train()
+    for epoch in range(epochs):
+        for batch_ in dataloader:
+            optimizer.zero_grad()
+
+            batch, labels = batch_
+            indeces = torch.randperm(batch.shape[0])
+            batch = batch[indeces].to(device) 
+            z0 = torch.randn(batch.shape).to(device)
+            t = torch.rand(batch.shape[0]).to(device)
+            t_expand = t.view(-1, 1, 1, 1).repeat(1, batch.shape[1], batch.shape[2], batch.shape[3])
+            labels = np.where(labels == 1, 0, 1)
+            labels = torch.tensor(labels).to(device)
+            labels_expand = labels.view(-1,1,1,1).repeat(1, batch.shape[1], batch.shape[2], batch.shape[3])
+            perturbed_data = t_expand * batch + (1.-t_expand) * z0
+
+            target = batch - z0        
+            score = rectified_flow.v_model(torch.stack([perturbed_data, t_expand, labels_expand], axis=1).reshape(-1,3,32,32))
             category = MSELoss()
             loss = category(score, target)
 

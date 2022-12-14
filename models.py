@@ -1,6 +1,7 @@
 import torch
 from torch.nn import Module, Sequential, Conv2d, MaxPool2d, Dropout2d, ReLU, Flatten, Linear, BatchNorm2d, AvgPool2d, Sigmoid, Tanh, Softmax, Dropout, ConvTranspose2d, BatchNorm1d, ModuleDict
 
+from util import one_hot_image
 ######### MLP #########
 
 class Toy_MLP(Module):
@@ -167,12 +168,13 @@ class U_Net_big(Module):
                            )
         return block
 
-    def __init__(self, input_shape, output_channels):
+    def __init__(self, input_shape, output_channels, device):
         '''input_shape: tuple (batch_size, channels, x_pixels, y_pixels)'''
         super().__init__()
 
         self.input_shape = input_shape
         self.output_channels = output_channels
+        self.device = device
 
         self.batches = []
         self.train_loss = []
@@ -193,8 +195,15 @@ class U_Net_big(Module):
             "max_pool": MaxPool2d(2)
         })
 
-    def forward(self, x):
-        skip_1 = self.NN['contr_1'](x)
+    def forward(self, t, x, c=None):
+        t_expand = t.view(-1, 1, 1, 1).repeat(1, 1, x.shape[2], x.shape[3])
+        if c != None:
+            c_expand = one_hot_image(c, self.device)
+            x_input = torch.cat([x, t_expand, c_expand], axis=1).reshape(-1, x.shape[1] + 2,32,32)
+        else:
+            x_input = torch.cat([x, t_expand], axis=1).reshape(-1, x.shape[1] + 1,32,32)
+
+        skip_1 = self.NN['contr_1'](x_input)
         contr_1 = self.NN["max_pool"](skip_1)
         skip_2 = self.NN["contr_2"](contr_1)
         contr_2 = self.NN["max_pool"](skip_2)

@@ -31,8 +31,12 @@ def show_samples(rectified_flow, get_samples, rows, columns, channels, img_size,
 
     for row in range(rows):
         for column in range(columns):
+            min = torch.min(img[-1][row*columns + column])
+            img[-1][row*columns + column] = img[-1][row*columns + column] - min
+            max = torch.max(img[-1][row*columns + column])
+            img[-1][row*columns + column] = img[-1][row*columns + column] / max
             ax[row, column].imshow(
-                img[-1][row*columns + column, 0].detach().cpu().numpy())
+                img[-1][row*columns + column].permute(1,2,0).detach().cpu().numpy())
     plt.show()
 
 
@@ -175,6 +179,8 @@ def load_Cifar10(batchsize, classes=None):
         train=False,
         transform=transform,
     )
+    train_dataset.targets = np.array(train_dataset.targets)
+    test_dataset.targets = np.array(test_dataset.targets)
 
     if classes != None:
         train_dataset.data = train_dataset.data[np.isin(

@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 
 import torch
 from torch.nn import Module, MSELoss
+from torchvision.transforms import RandomHorizontalFlip
 
 from scipy.integrate import RK45
 
@@ -22,6 +23,16 @@ class Toy_RectifiedFlow(Module):
         z_t = t * z1 + (1-t) * z0
         # connection line
         target = z1 - z0
+
+        return z_t, t, target
+
+    def get_train_tuple_non_linear(self, z0, z1):
+        # random times
+        t = torch.rand((z0.shape[0], 1)).to(self.device)
+        # linear interpolation
+        z_t = t^2 * z1 + (1-t)^2 * z0
+        # connection line
+        target = 2* t *z1 - 2* (1-t) *z0
 
         return z_t, t, target
 
@@ -72,6 +83,28 @@ def train_toy_rectified_flow(rectified_flow, optimizer, pairs, batchsize, inner_
         z0 = batch[:, 0].detach().clone()
         z1 = batch[:, 1].detach().clone()
         z_t, t, target = rectified_flow.get_train_tuple(z0, z1)
+
+        pred = rectified_flow.v_model(z_t, t)
+        loss = (target - pred).view(pred.shape[0], -1).abs().pow(2).sum(dim=1)
+        loss = loss.mean()
+        loss.backward()
+
+        optimizer.step()
+        loss_curve.append(loss.item())
+
+    rectified_flow.loss_curve = loss_curve
+    return rectified_flow
+
+def train_toy_rectified_flow_non_linear(rectified_flow, optimizer, pairs, batchsize, inner_iters):
+    loss_curve = rectified_flow.loss_curve
+    rectified_flow.v_model.train()
+    for i in range(inner_iters + 1):
+        optimizer.zero_grad()
+        indeces = torch.randperm(len(pairs))[:batchsize]
+        batch = pairs[indeces]
+        z0 = batch[:, 0].detach().clone()
+        z1 = batch[:, 1].detach().clone()
+        z_t, t, target = rectified_flow.get_train_tuple_non_linear(z0, z1)
 
         pred = rectified_flow.v_model(z_t, t)
         loss = (target - pred).view(pred.shape[0], -1).abs().pow(2).sum(dim=1)
@@ -684,7 +717,7 @@ def train_rectified_flow_Unet_cond_reverse(rectified_flow, optimizer, scheduler,
     return rectified_flow
 
 
-def train(rectified_flow, conditional, optimizer, scheduler, dataloader, get_samples, device, epochs, noise_factor=0):
+def train(rectified_flow, conditional, optimizer, scheduler, dataloader, get_samples, device, epochs, noise_factor=0, flip=False):
     loss_curve = rectified_flow.loss_curve
 
     rectified_flow.v_model.train()
@@ -696,6 +729,9 @@ def train(rectified_flow, conditional, optimizer, scheduler, dataloader, get_sam
             batch, labels = batch_
             indeces = torch.randperm(batch.shape[0])
             batch = batch[indeces].to(device)
+            if flip:
+                hflipper = RandomHorizontalFlip(p=0.5)
+                batch = hflipper(batch)
 
             if noise_factor != 0:
                 batch = batch + (torch.randn(batch.shape).to(device) * noise_factor) - \
@@ -714,7 +750,7 @@ def train(rectified_flow, conditional, optimizer, scheduler, dataloader, get_sam
                 score = rectified_flow.v_model(t, perturbed_data, labels)
             else:
                 score = rectified_flow.v_model(t, perturbed_data)
-            category = MSELoss()
+            category = MSELoss() # try reduction sum?
             loss = category(score, target)
 
             loss.backward()

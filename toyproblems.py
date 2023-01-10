@@ -134,7 +134,7 @@ class Toy_problem():
             del flow
             torch.cuda.empty_cache()
 
-    def show_flows(self, num_samples, num_connections, num_steps=100, elev=30, azim=-45, roll=0):
+    def show_flows(self, num_samples, num_connections, num_steps=100, elev=30, azim=-45, roll=1):
         rows = 1
         columns = len(self.flows) + 1
         size = (20, 4)
@@ -244,6 +244,149 @@ class Toy_problem():
         ax[-1].legend(fontsize=10, loc="lower left")
         plt.show()
 
+    def show_flows_single_images(self, num_samples, num_connections, num_steps=100, elev=30, azim=-45, roll=0, x_lim_low=0, x_lim_up=5, y_lim_low=0, y_lim_up=5):
+        plt.rcParams['figure.dpi'] = 120
+        rows = 1
+        columns = len(self.flows) + 1
+        size = (20, 4)
+        dimension = self.input_dim
+        # if dimension == 2:
+        #     fig, ax = plt.subplots(
+        #         rows, columns + 1, figsize=(size), sharex=True, sharey=True)
+        # if dimension == 3:
+        #     fig = plt.figure(figsize=(10, 10), dpi=80)
+        #     ax = fig.add_subplot(111, projection='3d')
+            # fig, ax = plt.subplots(
+            #     rows, columns + 1, figsize=(size), sharex=True, sharey=True, subplot_kw={'projection': '3d'})
+
+        z0, z1 = self.get_samples(num_samples)
+
+        if dimension == 2:
+            plt.scatter(z1[:, 0].cpu().numpy(),
+                          z1[:, 1].cpu().numpy(), label=r'$\pi_1$', alpha=0.15)
+            plt.scatter(z0[:, 0].cpu().numpy(),
+                          z0[:, 1].cpu().numpy(), label=r'$\pi_0$', alpha=0.15)
+
+            for pair in range(num_connections):
+                plt.plot([z0[pair][0].cpu().numpy(), z1[pair][0].cpu().numpy()], [
+                           z0[pair][1].cpu().numpy(), z1[pair][1].cpu().numpy()])
+
+        if dimension == 3:
+            fig = plt.figure(figsize=(10, 10), dpi=80)
+            ax = fig.add_subplot(111, projection='3d')
+            ax.view_init(elev, azim, roll)
+            ax.scatter(z1[:, 0].cpu().numpy(),
+                          z1[:, 1].cpu().numpy(), z1[:, 2].cpu().numpy(),label=r'$\pi_1$', alpha=0.15)
+            ax.scatter(z0[:, 0].cpu().numpy(),
+                          z0[:, 1].cpu().numpy(), z0[:, 2].cpu().numpy(), label=r'$\pi_0$', alpha=0.15)
+
+
+            for pair in range(num_connections):
+                ax.plot([z0[pair][0].cpu().numpy(), z1[pair][0].cpu().numpy()], [
+                           z0[pair][1].cpu().numpy(), z1[pair][1].cpu().numpy()], [z0[pair][2].cpu().numpy(), z1[pair][2].cpu().numpy()])
+
+        #remove title
+        # make square
+        # remove axis lbeling
+        #plt.title("Initial Matching")
+        plt.xlim(x_lim_low, x_lim_up)
+        plt.ylim(y_lim_low, y_lim_up)
+        plt.xticks([])
+        plt.yticks([])
+        plt.gca().set_aspect('equal')
+        plt.rcParams['figure.dpi'] = 120
+        plt.legend(fontsize=10, loc="lower left")
+        plt.savefig(f"images/toy9_{1}")
+        plt.show()
+
+        for column in range(1, columns):
+            flow = self.flows[column - 1]
+            flow.v_model.eval()
+            traj = flow.sample_ode(z0=z0, num_steps=num_steps)
+
+            if dimension == 2:
+                plt.scatter(z1[:, 0].cpu().numpy(
+                ), z1[:, 1].cpu().numpy(), label=r'$\pi_1$', alpha=0.15)
+                plt.scatter(z0[:, 0].cpu().numpy(
+                ), z0[:, 1].cpu().numpy(), label=r'$\pi_0$', alpha=0.15)
+                plt.scatter(traj[-1][:, 0].cpu().numpy(), traj[-1]
+                                   [:, 1].cpu().numpy(), label='Generated', alpha=0.15)
+
+                traj_particles = torch.stack(traj)
+                for i in range(num_connections):
+                    plt.plot(traj_particles[:, i, 0].cpu(
+                    ).numpy(), traj_particles[:, i, 1].cpu().numpy())
+                plt.xlim(x_lim_low, x_lim_up)
+                plt.ylim(y_lim_low, y_lim_up)
+                plt.xticks([])
+                plt.yticks([])
+                plt.legend(fontsize=10, loc="lower left")
+                plt.gca().set_aspect('equal')
+                plt.savefig(f"images/toy9_{1 + column}")
+                plt.show()
+
+            if dimension == 3:
+                return
+                ax[column].view_init(elev, azim, roll)
+                ax[column].scatter(z1[:, 0].cpu().numpy(
+                ), z1[:, 1].cpu().numpy(), z1[:, 2].cpu().numpy(),label=r'$\pi_1$', alpha=0.05)
+                ax[column].scatter(z0[:, 0].cpu().numpy(
+                ), z0[:, 1].cpu().numpy(),z0[:, 2].cpu().numpy(), label=r'$\pi_0$', alpha=0.05)
+                ax[column].scatter(traj[-1][:, 0].cpu().numpy(), traj[-1]
+                                   [:, 1].cpu().numpy(),traj[-1][:, 2].cpu().numpy(), label='Generated', alpha=0.2)
+
+                traj_particles = torch.stack(traj)
+                for i in range(num_connections):
+                    ax[column].plot(traj_particles[:, i, 0].cpu(
+                    ).numpy(), traj_particles[:, i, 1].cpu().numpy(), traj_particles[:, i, 2].cpu().numpy())
+
+            # plt.set_title(f"{column}-Rectified Flow")
+            # plt.legend(fontsize=10, loc="lower left")
+        
+        flow = self.flows[-1]
+        flow.v_model.eval()
+        traj = flow.reverse_sample_ode(z1=z1, num_steps=num_steps)
+
+        if dimension == 2:
+            plt.scatter(z1[:, 0].cpu().numpy(),
+                           z1[:, 1].cpu().numpy(), label=r'$\pi_1$', alpha=0.15)
+            plt.scatter(z0[:, 0].cpu().numpy(),
+                           z0[:, 1].cpu().numpy(), label=r'$\pi_0$', alpha=0.15)
+            plt.scatter(traj[-1][:, 0].cpu().numpy(), traj[-1]
+                           [:, 1].cpu().numpy(), label='Generated', alpha=0.15)
+
+            traj_particles = torch.stack(traj)
+            for i in range(num_connections):
+                plt.plot(traj_particles[:, i, 0].cpu().numpy(),
+                            traj_particles[:, i, 1].cpu().numpy())
+
+
+        # if dimension == 3:
+        #     ax[-1].view_init(elev, azim, roll)
+        #     ax[-1].scatter(z1[:, 0].cpu().numpy(),
+        #                    z1[:, 1].cpu().numpy(), z1[:, 2].cpu().numpy(), label=r'$\pi_1$', alpha=0.15)
+        #     ax[-1].scatter(z0[:, 0].cpu().numpy(),
+        #                    z0[:, 1].cpu().numpy(), z0[:, 2].cpu().numpy(), label=r'$\pi_0$', alpha=0.0)
+        #     ax[-1].scatter(traj[-1][:, 0].cpu().numpy(), traj[-1]
+        #                    [:, 1].cpu().numpy(), traj[-1][:, 2].cpu().numpy(), label='Generated', alpha=0.15)
+
+        #     traj_particles = torch.stack(traj)
+        #     for i in range(num_connections):
+        #         ax[-1].plot(traj_particles[:, i, 0].cpu().numpy(),
+        #                     traj_particles[:, i, 1].cpu().numpy(),
+        #                     traj_particles[:, i, 2].cpu().numpy())
+
+        # plt.title("Reverse Sampling")
+        plt.xlim(x_lim_low, x_lim_up)
+        plt.ylim(y_lim_low, y_lim_up)
+        plt.xticks([])
+        plt.yticks([])
+        plt.gca().set_aspect('equal')
+        plt.legend(fontsize=10, loc="lower left")
+        plt.savefig(f"images/toy9_{4}")
+        plt.show()
+  
+
     def show_zones(self, num_samples, num_steps=100, elev=30, azim=-45, roll=0):
         dimension = self.input_dim
         z1 = self.get_samples_target(num_samples)
@@ -269,7 +412,7 @@ class Toy_problem():
                 ax.view_init(elev,azim,roll)
 
         plt.axis('scaled')
-        ax.legend(fontsize=10, loc="lower left")
+        #ax.legend(fontsize=10, loc="lower left")
         ax.set_title('Distribution')
         plt.show()
 
@@ -734,3 +877,18 @@ class Toy_problem24(Toy_problem):
                                          2, 12], [2, 14]]).float(), 0.1*torch.stack([torch.eye(2) for i in range(self.num_piles_init)]))
         self.distribution_target = MultivariateNormal(torch.tensor(
             [[6, 9]]).float(), 0.1*torch.stack([torch.eye(2)]))
+
+class Toy_problem25(Toy_problem):
+    def __init__(self, device):
+        super().__init__(device)
+
+        self.input_dim = 2
+        self.num_piles_init = 6
+        self.num_piles_target = 1
+        self.pile_sampler_init = Categorical(torch.tensor([1/2, 1/10, 1/10, 1/10, 1/10, 1/10]))
+        self.pile_sampler_target = Categorical(torch.tensor(
+            [1/self.num_piles_target for i in range(self.num_piles_target)]))
+        self.distribution_init = MultivariateNormal(torch.tensor([[5, 0], [5 * np.cos(2 * np.pi / self.num_piles_init), 5 * np.sin(2 * np.pi / self.num_piles_init)], [5 * np.cos(4 * np.pi / self.num_piles_init), 5 * np.sin(4 * np.pi / self.num_piles_init)], [5 * np.cos(6 * np.pi / self.num_piles_init), 5 * np.sin(
+            6 * np.pi / self.num_piles_init)], [5 * np.cos(8 * np.pi / self.num_piles_init), 5 * np.sin(8 * np.pi / self.num_piles_init)], [5 * np.cos(10 * np.pi / self.num_piles_init), 5 * np.sin(10 * np.pi / self.num_piles_init)]]).float(), 0.1*torch.stack([torch.eye(2) for i in range(self.num_piles_init)]))
+        self.distribution_target = MultivariateNormal(
+            torch.tensor([[0, 0]]).float(), 0.1*torch.stack([torch.eye(2)]))

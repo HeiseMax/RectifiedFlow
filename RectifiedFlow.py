@@ -761,3 +761,93 @@ def train(rectified_flow, conditional, optimizer, scheduler, dataloader, get_sam
 
     rectified_flow.loss_curve = loss_curve
     return rectified_flow
+
+def train_translation(rectified_flow, conditional, optimizer, scheduler, dataloader, get_samples, device, epochs, noise_factor=0, flip=False):
+    loss_curve = rectified_flow.loss_curve
+
+    rectified_flow.v_model.train()
+    for epoch in range(epochs):
+        for batch_ in dataloader:
+
+            optimizer.zero_grad()
+
+            batch, labels = batch_
+            indeces = torch.randperm(batch.shape[0])
+            batch = batch[indeces].to(device)
+            if flip:
+                hflipper = RandomHorizontalFlip(p=0.5)
+                batch = hflipper(batch)
+
+            if noise_factor != 0:
+                batch = batch + (torch.randn(batch.shape).to(device) * noise_factor) - \
+                    (torch.randn(batch.shape).to(device) * noise_factor)
+
+            z0 = get_samples(batch.shape, device)
+            if noise_factor != 0:
+                z0 = z0 + (torch.randn(z0.shape).to(device) * noise_factor) - \
+                    (torch.randn(z0.shape).to(device) * noise_factor)
+            t = torch.rand(batch.shape[0]).to(device)
+            t_expand = t.view(-1, 1, 1, 1).repeat(1,
+                                                  batch.shape[1], batch.shape[2], batch.shape[3])
+            perturbed_data = t_expand * batch + (1.-t_expand) * z0
+
+            target = batch - z0
+            if conditional:
+                labels = torch.tensor(
+                    labels[indeces].clone().detach()).to(device)
+                score = rectified_flow.v_model(t, perturbed_data, labels)
+            else:
+                score = rectified_flow.v_model(t, perturbed_data)
+            category = MSELoss() # try reduction sum?
+            loss = category(score, target)
+
+            loss.backward()
+            optimizer.step()
+            loss_curve.append(loss.item())
+            if scheduler != None:
+                scheduler.step(loss.item())
+
+    rectified_flow.loss_curve = loss_curve
+    return rectified_flow
+    
+def train_reflow(rectified_flow, conditional, optimizer, scheduler, z0_initial, z1, batch_size, device, epochs, noise_factor=0, flip=False):
+    loss_curve = rectified_flow.loss_curve
+
+    rectified_flow.v_model.train()
+    for epoch in range(epochs):
+        optimizer.zero_grad()
+
+        indeces = torch.randperm(batch_size)
+
+        z0, batch = torch.tensor(z0_initial[indeces]).to(device).float(), torch.tensor(z1[indeces]).to(device).float()
+        if flip:
+            hflipper = RandomHorizontalFlip(p=0.5)
+            batch = hflipper(batch)
+
+        if noise_factor != 0:
+            batch = batch + (torch.randn(batch.shape).to(device) * noise_factor) - \
+                (torch.randn(batch.shape).to(device) * noise_factor)
+
+        t = torch.rand(batch.shape[0]).to(device).float()
+        t_expand = t.view(-1, 1, 1, 1).repeat(1,
+                                                batch.shape[1], batch.shape[2], batch.shape[3])
+        perturbed_data = t_expand * batch + (1.-t_expand) * z0
+
+        target = batch - z0
+        if conditional:
+            labels = torch.tensor(
+                labels[indeces].clone().detach()).to(device)
+            score = rectified_flow.v_model(t, perturbed_data, labels)
+        else:
+            score = rectified_flow.v_model(t, perturbed_data)
+        category = MSELoss() # try reduction sum?
+        loss = category(score, target)
+
+        loss.backward()
+        optimizer.step()
+        loss_curve.append(loss.item())
+        if scheduler != None:
+            scheduler.step(loss.item())
+
+    rectified_flow.loss_curve = loss_curve
+    return rectified_flow

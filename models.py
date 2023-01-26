@@ -5,20 +5,45 @@ from util import one_hot_image
 ######### MLP #########
 
 class Toy_MLP(Module):
-    def __init__(self, input_dim, layers, hidden_num):
+    def __init__(self, input_dim, layers, hidden_num, p_drop = 0.2):
         super().__init__()
         self.NN = Sequential(Linear(input_dim + 1, hidden_num, bias=True))
 
+        self.p_drop = p_drop
+
         for layer in range(layers -2):
             self.NN.append(Tanh())
+            self.NN.append(Dropout(p_drop))
             self.NN.append(Linear(hidden_num, hidden_num, bias=True))
         self.NN.append(Tanh())
+        self.NN.append(Dropout(p_drop))
         self.NN.append(Linear(hidden_num, input_dim, bias=True))
                             
     
     def forward(self, x_input, t):
         inputs = torch.cat([x_input, t], dim=1)
         x = self.NN(inputs)
+
+        return x
+
+class Toy_MLP_distill(Module):
+    def __init__(self, input_dim, layers, hidden_num, p_drop = 0.2):
+        super().__init__()
+        self.NN = Sequential(Linear(input_dim, hidden_num, bias=True))
+
+        self.p_drop = p_drop
+
+        for layer in range(layers -2):
+            self.NN.append(Tanh())
+            self.NN.append(Dropout(p_drop))
+            self.NN.append(Linear(hidden_num, hidden_num, bias=True))
+        self.NN.append(Tanh())
+        self.NN.append(Dropout(p_drop))
+        self.NN.append(Linear(hidden_num, input_dim, bias=True))
+                            
+    
+    def forward(self, x_input):
+        x = self.NN(x_input)
 
         return x
 

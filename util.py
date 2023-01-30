@@ -56,12 +56,12 @@ def show_samples_array(rectified_flow, samples, rows, columns, num_steps, device
         for column in range(columns):
             i = row * columns + column
             img = rectified_flow.sample_ode(samples[i], num_steps)[-1]
-            min = torch.min(img[i])
-            img[i] = img[i] - min
-            max = torch.max(img[i])
-            img[i] = img[i] / max
+            min = torch.min(img[0])
+            img[0] = img[0] - min
+            max = torch.max(img[0])
+            img[0] = img[0] / max
             ax[row, column].imshow(
-                img[i].permute(1,2,0).detach().cpu().numpy())
+                img[0].permute(1,2,0).detach().cpu().numpy())
     
     plt.xticks([])
     plt.yticks([])
@@ -229,15 +229,17 @@ def show_trajectory_translation(rectified_flow, get_samples, rows, columns, chan
     plt.yticks([])
     plt.show()
 
-def show_trajectories(rectified_flow, get_samples, img_size, num_steps, device):
+def show_trajectories(rectified_flow, get_samples, img_size, num_steps, x, y, device):
     rectified_flow.v_model.eval()
+    plt.rcParams['figure.dpi'] = 120
     img_init = get_samples((20, 1, img_size, img_size), device=device)
     img = rectified_flow.sample_ode(img_init, num_steps)
     s = torch.zeros(20, len(img), 1, 32, 32)
     for i in range(len(img)):
         s[:, i] = img[i]
     for i in range(20):
-        plt.plot(s[i, :, 0, 15, 15].cpu().numpy())
+        plt.plot(s[i, :, 0, x, y].cpu().numpy())
+    plt.ylim(-1.8, 1.8)
     plt.plot()
 
 ########## DataLoaders ##########

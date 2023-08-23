@@ -578,6 +578,59 @@ class Toy_problem():
         #ax.set_title('Distribution')
         plt.show()
 
+    def show_field(self, num_samples, num_steps=100, x_lim_low=0, x_lim_up=5, y_lim_low=0, y_lim_up=5):
+        plt.rcParams['figure.dpi'] = 300
+        #plt.rcParams["figure.figsize"] = (9,5)
+        dimension = self.input_dim
+        
+        x, y = np.meshgrid(np.linspace(1,7,20),np.linspace(1,7,20))
+        z0 = torch.tensor(np.concatenate([x.reshape(-1,1),y.reshape(-1,1)], axis=1)).float().to(self.device)
+        t = np.linspace(0, 1, 20)
+        t = torch.tensor(t).float().to(self.device)
+        t = t.repeat(20, 1).flatten()[:, None]
+        print(t.shape, z0.shape)
+        traj = self.flows[-2].v_model(z0, t).detach().cpu().numpy()
+
+        plt.quiver(x, y, traj[:,0], traj[:,1], color='r', alpha=0.5)
+
+        x, y = np.linspace(2.5, 5.2, 9),np.array([5.33, 5, 4.66,4.33, 4.0, 4.0, 4.33, 4.66, 5])
+        print(x.shape)
+        z0 = torch.tensor(np.concatenate([x.reshape(-1,1),y.reshape(-1,1)], axis=1)).float().to(self.device)
+        t = np.linspace(0.1, 0.9, 9)
+        t = torch.tensor(t).float().to(self.device)
+        t = t.repeat(1, 1).flatten()[:, None]
+        print(t.shape, z0.shape)
+        traj = self.flows[-2].v_model(z0, t).detach().cpu().numpy()
+
+        plt.quiver(x, y, traj[:,0], traj[:,1], color='b', alpha=0.8)
+
+        x, y = np.linspace(2.9, 4.5, 3),np.array([1.8,1.8, 1.8])
+        print(x.shape)
+        z0 = torch.tensor(np.concatenate([x.reshape(-1,1),y.reshape(-1,1)], axis=1)).float().to(self.device)
+        t = np.linspace(0.3, 0.7, 3)
+        t = torch.tensor(t).float().to(self.device)
+        t = t.repeat(1, 1).flatten()[:, None]
+        print(t.shape, z0.shape)
+        traj = self.flows[-2].v_model(z0, t).detach().cpu().numpy()
+
+        plt.quiver(x, y, traj[:,0], traj[:,1], color='b', alpha=0.8, scale=50)
+
+        z0 = self.get_samples_init(num_samples).to(self.device)
+        z1 = self. get_samples_target(num_samples).to(self.device)
+        plt.scatter(z0[:, 0].cpu().numpy(), z0[:, 1].cpu().numpy(), alpha=0.15)
+        plt.scatter(z1[:, 0].cpu().numpy(), z1[:, 1].cpu().numpy(), alpha=0.15)
+
+        plt.axis('scaled')
+        # plt.xlim(x_lim_low, x_lim_up)
+        # plt.ylim(y_lim_low, y_lim_up)
+        #ax.legend(fontsize=10, loc="lower left")
+        plt.gca().set_aspect('equal')
+        plt.gca().set_axis_off()
+        plt.rcParams['figure.dpi'] = 120
+        plt.savefig(f"images/{self.name}_distr")
+        #ax.set_title('Distribution')
+        plt.show()
+
 #### configurable Toy_problems with different data distributions, inheriting from Toy_problem class ####
 
 class Toy_problem1(Toy_problem):
@@ -756,9 +809,70 @@ class Toy_problem9(Toy_problem):
         samples_init = torch.tensor(samples[indices]).float().to(self.device)
 
         return samples_init
+    
+    def get_samples_init_moon1(self, num_samples):
+        samples, label = make_moons(num_samples*2, shuffle=False, noise=0.05)
+        samples = torch.tensor(samples[:num_samples]).float().to(self.device)
 
-    def show_zones(self, num_samples, num_steps=100):
-        assert False
+        return samples
+
+    def get_samples_init_moon2(self, num_samples):
+        samples, label = make_moons(num_samples*2, shuffle=False, noise=0.05)
+        samples = torch.tensor(samples[num_samples:]).float().to(self.device)
+
+        return samples
+
+    def show_zones(self, num_samples, num_steps=100, elev=30, azim=-45, roll=0):
+        dimension = self.input_dim
+        z1 = self.get_samples_target(num_samples)
+        if dimension == 2:
+            fig, ax = plt.subplots(
+                    1, 1, sharex=True, sharey=True)
+            ax.scatter(z1[:, 0].cpu().numpy(), z1[:, 1].cpu().numpy(), label=r'$\pi_1$', alpha=0.15)
+        if dimension == 3:
+            fig, ax = plt.subplots(
+                    1, 1, sharex=True, sharey=True, subplot_kw={'projection': '3d'})
+            ax.scatter(z1[:, 0].cpu().numpy(), z1[:, 1].cpu().numpy(),  z1[:, 2].cpu().numpy(),label=r'$\pi_1$', alpha=0.00)
+        for i in range(self.num_piles_init):
+            p = np.zeros([self.num_piles_init])
+            p[i] = 1
+            pile_sampler = Categorical(torch.tensor(p))
+
+            z0 = torch.tensor(make_moons(num_samples*2, shuffle=False, noise=0.05)[0][i*num_samples:(i+1)*num_samples]).float().to(self.device)
+            traj = self.flows[-1].sample_ode(z0=z0, num_steps=num_steps)
+            if self.input_dim == 2:
+                ax.scatter(traj[-1][:, 0].cpu().numpy(), traj[-1][:, 1].cpu().numpy(), label='Generated', alpha=0.3)
+            if self.input_dim == 3:
+                ax.scatter(traj[-1][:, 0].cpu().numpy(), traj[-1][:, 1].cpu().numpy(), traj[-1][:, 2].cpu().numpy(), label='Generated', alpha=0.4)
+                ax.view_init(elev,azim,roll)
+
+        plt.axis('scaled')
+        #ax.legend(fontsize=10, loc="lower left")
+        ax.set_title('Distribution')
+        plt.show()
+
+    def show_field(self, num_samples, num_steps=100, x_lim_low=0, x_lim_up=5, y_lim_low=0, y_lim_up=5):
+        plt.rcParams['figure.dpi'] = 120
+        #plt.rcParams["figure.figsize"] = (9,5)
+        dimension = self.input_dim
+        
+        x, y = np.meshgrid(np.linspace(2,6,10),np.linspace(2,6,10))
+        z0 = torch.tensor(np.concatenate([x.reshape(-1,1),y.reshape(-1,1)], axis=1)).float().to(self.device)
+        t = np.linspace(0, 1, 10)
+        traj = self.flows[-1].v_model(z0, t)
+
+        plt.quiver(x, y, traj[:,0].cpu().numpy(), traj[:,1].cpu().numpy(), color='r', alpha=0.5)
+
+        plt.axis('scaled')
+        # plt.xlim(x_lim_low, x_lim_up)
+        # plt.ylim(y_lim_low, y_lim_up)
+        #ax.legend(fontsize=10, loc="lower left")
+        plt.gca().set_aspect('equal')
+        plt.gca().set_axis_off()
+        plt.rcParams['figure.dpi'] = 120
+        plt.savefig(f"images/{self.name}_distr")
+        #ax.set_title('Distribution')
+        plt.show()
 
 class Toy_problem10(Toy_problem):
     def __init__(self, device):

@@ -38,7 +38,7 @@ def show_samples(rectified_flow, get_samples, rows, columns, channels, img_size,
             max = torch.max(img[i])
             img[i] = img[i] / max
             ax[row, column].imshow(
-                img[i].permute(1,2,0).detach().cpu().numpy())
+                img[i].permute(1,2,0).detach().cpu().numpy(), cmap="gray_r")
     
     plt.xticks([])
     plt.yticks([])
@@ -168,7 +168,7 @@ def show_trajecrory_samples(rectified_flow, sample1, sample2, rows, columns, num
             max = torch.max(img[-1][0])
             img[0] = img[0] / max
 
-            ax[row, column].imshow(img[0].permute(1,2,0).detach().cpu().numpy())
+            ax[row, column].imshow(img[0].permute(1,2,0).detach().cpu().numpy(), cmap="gray_r")
 
     plt.xticks([])
     plt.yticks([])

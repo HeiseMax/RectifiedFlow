@@ -7,6 +7,8 @@ from torchvision.transforms import RandomHorizontalFlip
 
 from scipy.integrate import RK45
 
+from util import show_samples
+
 
 class Toy_RectifiedFlow(Module):
     def __init__(self, v_model, device):
@@ -758,6 +760,58 @@ def train(rectified_flow, conditional, optimizer, scheduler, dataloader, get_sam
             loss_curve.append(loss.item())
             if scheduler != None:
                 scheduler.step(loss.item())
+
+        if epoch % 60 == 0:
+            print(epoch)
+            show_samples(rectified_flow, get_samples, 2, 5, 1, 32, 100, device, False)
+
+    rectified_flow.loss_curve = loss_curve
+    return rectified_flow
+
+def train_cond(rectified_flow, optimizer, scheduler, dataloader, get_samples, encoder, device, epochs, noise_factor=0, flip=False):
+    loss_curve = rectified_flow.loss_curve
+
+    rectified_flow.v_model.train()
+    for epoch in range(epochs):
+        for batch_ in dataloader:
+
+            optimizer.zero_grad()
+
+            batch, labels = batch_
+            indeces = torch.randperm(batch.shape[0])
+            batch = batch[indeces].to(device)
+            if flip:
+                hflipper = RandomHorizontalFlip(p=0.5)
+                batch = hflipper(batch)
+
+            if noise_factor != 0:
+                batch = batch + (torch.randn(batch.shape).to(device) * noise_factor) - \
+                    (torch.randn(batch.shape).to(device) * noise_factor)
+
+            z0 = get_samples(batch.shape, device)
+            t = torch.rand(batch.shape[0]).to(device)
+            t_expand = t.view(-1, 1, 1, 1).repeat(1,
+                                                  batch.shape[1], batch.shape[2], batch.shape[3])
+            perturbed_data = t_expand * batch + (1.-t_expand) * z0
+
+            encoder.eval()
+            encoder.requires_grad_(False)
+            c = encoder(batch[:, :1, 2:-2, 2:-2])
+
+            target = batch - z0
+            score = rectified_flow.v_model(t, perturbed_data, c)
+            category = MSELoss()
+            loss = category(score, target)
+
+            loss.backward()
+            optimizer.step()
+            loss_curve.append(loss.item())
+            if scheduler != None:
+                scheduler.step(loss.item())
+
+        # if epoch % 60 == 0:
+        #     print(epoch)
+        #     show_samples(rectified_flow, get_samples, 2, 5, 1, 32, 100, device, False)
 
     rectified_flow.loss_curve = loss_curve
     return rectified_flow
